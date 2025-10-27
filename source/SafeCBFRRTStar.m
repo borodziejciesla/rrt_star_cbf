@@ -58,11 +58,11 @@ rng('shuffle');
 found = false;
 goalIdx = -1;
 
-figure; hold on;
-imagesc(gridX, gridY, ~occupancy); axis xy; colormap(gray);
-plot(start(1), start(2), 'go','MarkerFaceColor','g');
-plot(goal(1), goal(2), 'ro','MarkerFaceColor','r');
-title('RRT* with CBF safety'); drawnow;
+% figure; hold on;
+% imagesc(gridX, gridY, ~occupancy); axis xy; colormap(gray);
+% plot(start(1), start(2), 'go','MarkerFaceColor','g');
+% plot(goal(1), goal(2), 'ro','MarkerFaceColor','r');
+% title('RRT* with CBF safety'); drawnow;
 
 for iter = 1:params.maxIter
     % sample
@@ -88,13 +88,13 @@ for iter = 1:params.maxIter
     if ~isCollisionFreeLine(p_near, p_new, Focc, params.samplesPerEdge)
         continue;
     end
-    if ~isCBFSafeSegment(p_near, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge)
+    if ~isCBFSafeSegment(p_near, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
         continue;
     end
 
     % candidate cost from nearest
     mean_h = meanSampledH(p_near, p_new, Fh, params.samplesPerEdge);
-    Jedge = edgeCostWeighted(p_near, p_new, mean_h, params.c);
+    Jedge = edgeCostWeighted(p_near, p_new, mean_h, params.c, params.do_cbf);
     cost_from_near = nodes(idx_near).cost + Jedge;
 
     % find neighbors within radius
@@ -108,11 +108,11 @@ for iter = 1:params.maxIter
         if ~isCollisionFreeLine(pj, p_new, Focc, params.samplesPerEdge)
             continue;
         end
-        if ~isCBFSafeSegment(pj, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge)
+        if ~isCBFSafeSegment(pj, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
             continue;
         end
         mean_h_j = meanSampledH(pj, p_new, Fh, params.samplesPerEdge);
-        Je = edgeCostWeighted(pj, p_new, mean_h_j, params.c);
+        Je = edgeCostWeighted(pj, p_new, mean_h_j, params.c, params.do_cbf);
         newCost = nodes(j).cost + Je;
         if newCost < best_cost
             best_cost = newCost;
@@ -133,11 +133,11 @@ for iter = 1:params.maxIter
         if ~isCollisionFreeLine(p_new, pj, Focc, params.samplesPerEdge)
             continue;
         end
-        if ~isCBFSafeSegment(p_new, pj, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge)
+        if ~isCBFSafeSegment(p_new, pj, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
             continue;
         end
         mean_h_pj = meanSampledH(p_new, pj, Fh, params.samplesPerEdge);
-        newCost = nodes(newIdx).cost + edgeCostWeighted(p_new, pj, mean_h_pj, params.c);
+        newCost = nodes(newIdx).cost + edgeCostWeighted(p_new, pj, mean_h_pj, params.c, params.do_cbf);
         if newCost < nodes(j).cost
             nodes(j).parent = newIdx;
             nodes(j).cost = newCost;
@@ -146,16 +146,16 @@ for iter = 1:params.maxIter
 
     % draw new edge
     parentPos = nodes(nodes(newIdx).parent).pos;
-    plot([parentPos(1), p_new(1)], [parentPos(2), p_new(2)], 'b-'); drawnow limitrate;
+    % plot([parentPos(1), p_new(1)], [parentPos(2), p_new(2)], 'b-'); drawnow limitrate;
 
     % try connect to goal
     if norm(p_new - goal) <= params.stepSize
         if isCollisionFreeLine(p_new, goal, Focc, params.samplesPerEdge) && ...
-           isCBFSafeSegment(p_new, goal, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge)
+           isCBFSafeSegment(p_new, goal, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
             mean_h_goal = meanSampledH(p_new, goal, Fh, params.samplesPerEdge);
             nodes(end+1).pos = goal;
             nodes(end).parent = newIdx;
-            nodes(end).cost = nodes(newIdx).cost + edgeCostWeighted(p_new, goal, mean_h_goal, params.c);
+            nodes(end).cost = nodes(newIdx).cost + edgeCostWeighted(p_new, goal, mean_h_goal, params.c, params.do_cbf);
             goalIdx = numel(nodes);
             found = true;
             break;
@@ -178,7 +178,7 @@ while pidx ~= 0
 end
 
 % plot final path
-plot(path(:,1), path(:,2), 'r-', 'LineWidth', 2);
+% plot(path(:,1), path(:,2), 'r-', 'LineWidth', 2);
 end
 
 %% ---------------- helper functions ----------------
@@ -190,9 +190,14 @@ function ok = isCollisionFreeLine(a, b, Focc, nSamples)
     ok = all(occVals <= 0.5); % occupied ~1
 end
 
-function ok = isCBFSafeSegment(a, b, Fh, Fdhx, Fdhy, kappa, nSamples)
+function ok = isCBFSafeSegment(a, b, Fh, Fdhx, Fdhy, kappa, nSamples, do_cbf, v)
+    if do_cbf == false
+        ok = true;
+        return
+    end
     % discrete check of CBF: for each sample p along a->b
     %    grad_h(p) dot (b-a) >= -kappa * h(p) * ||b-a||
+    theta = atan2(b(2)-a(2), b(1)-a(1));
     dvec = b - a;
     L = norm(dvec);
     if L < 1e-9, ok = true; return; end
@@ -209,7 +214,9 @@ function ok = isCBFSafeSegment(a, b, Fh, Fdhx, Fdhy, kappa, nSamples)
             ok = false; return;
         end
     end
-    ok = true;
+    h_prim = v*(dhx*cos(theta) + dhy*sin(theta));
+    condition = (h_prim+kappa*hvals > 0);
+    ok = all(condition);
 end
 
 function meanh = meanSampledH(a, b, Fh, nSamples)
@@ -221,7 +228,11 @@ function meanh = meanSampledH(a, b, Fh, nSamples)
     meanh = max(0, min(1, meanh));
 end
 
-function J = edgeCostWeighted(a, b, mean_h, c)
+function J = edgeCostWeighted(a, b, mean_h, c, do_cbf)
     L = norm(b - a);
-    J = c * L + (1 - c) * (1/mean_h); %(1 - mean_h);
+    if do_cbf
+        J = c * L + (1 - c) * (1/mean_h); %(1 - mean_h);
+    else
+        J = L;
+    end
 end

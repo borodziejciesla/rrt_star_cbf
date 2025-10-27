@@ -24,16 +24,38 @@ function [h, dhdx, dhdy] = GeneratePoissonSafetyFunction(boundry, objects_list)
     % Define equation
     specifyCoefficients(model, 'm', 0, 'd', 0, 'c', 1, 'a', 0, 'f', [0;0]);
 
+    % Boundry condition on objects
+    function bcval = bc_location(location, ~)
+        % location.x, location.y - border points
+        x = location.x;
+        y = location.y;
+        np = numel(x);
+        bcval = zeros(2, np);   % all points: [u_x; u_y]
+        
+        for k = 1:np
+            for object_index = 1:length(objects_list)
+                dx = x(k) - objects_list{object_index}.c(1);
+                dy = y(k) - objects_list{object_index}.c(2);
+                d = sqrt(dx^2 + dy^2);
+                if d <= objects_list{object_index}.r + 1e-6
+                    bcval(:,k) = 2000 * [x(k) - objects_list{object_index}.c(1); y(k) - objects_list{object_index}.c(2)];
+                end
+            end
+
+            bcval(:,k) = [0.1; 0.1];
+        end
+    end
+
     % Set boundry conditions
     applyBoundaryCondition(model, ...
         'dirichlet', ...
         'Edge', 1:model.Geometry.NumEdges, ...
         'u', @bc_location);
 
-    % --- Generowanie siatki
+    % --- Generate mesh
     generateMesh(model, 'Hmax', 0.01);
 
-    % --- Rozwiązanie PDE
+    % --- Solve PDE
     result = solvepde(model);
 
 
@@ -74,55 +96,25 @@ function [h, dhdx, dhdy] = GeneratePoissonSafetyFunction(boundry, objects_list)
     result_h = solvepde(model_h);
 
     %% Convert to grids
-    h = result_h.NodalSolution; % rozwiązanie w węzłach FEM
+    h = result_h.NodalSolution; % solution in FEM modes
     [p, ~, ~] = meshToPet(model_h.Mesh);
     
-    % Ekstrakcja współrzędnych węzłów
+    % Extract nodes
     x = p(1, :)';
     y = p(2, :)';
     
-    % Ustal zakres siatki i liczbę punktów
+    % Set grid
     nx = 100;
     ny = 100;
     xq = linspace(min(x), max(x), nx);
     yq = linspace(min(y), max(y), ny);
     [Xq, Yq] = meshgrid(xq, yq);
     
-    % Interpolacja rozwiązania h(x,y)
+    % interpolate h(x,y)
     h = griddata(x, y, h, Xq, Yq, 'linear');
     
     [dhdx, dhdy] = gradient(h, xq, yq);
 end
 
 
-%% Boundry condition on objects
-function bcval = bc_location(location, ~)
-    % location.x, location.y to wektory współrzędnych punktów na brzegu
-    x = location.x;
-    y = location.y;
-    np = numel(x);
-    bcval = zeros(2, np);   % każdy punkt: [u_x; u_y]
-    
-    % Parametry (muszą być zgodne z tymi w skrypcie wyżej)
-    c1 = [0.3, 0.5]; r1 = 0.1;
-    c2 = [0.7, 0.5]; r2 = 0.1;
-    tol = 1e-6;
-    
-    for k = 1:np
-        dx1 = x(k)-c1(1); dy1 = y(k)-c1(2);
-        d1 = sqrt(dx1^2 + dy1^2);
-        dx2 = x(k)-c2(1); dy2 = y(k)-c2(2);
-        d2 = sqrt(dx2^2 + dy2^2);
-        
-        if d1 <= r1 + 1e-6
-            % punkt leży na brzegu pierwszego otworu
-            bcval(:,k) = 1 * [x(k)-c1(1); y(k)-c1(2)];          % przykładowa wartość
-        elseif d2 <= r2 + 1e-6
-            % punkt na brzegu drugiego otworu
-            bcval(:,k) = 1 * [x(k)-c2(1); y(k)-c2(2)];        % przykładowa wartość
-        else
-            % punkt na zewnętrznym brzegu (zewnętrzna ramka)
-            bcval(:,k) = [0; 0];
-        end
-    end
-end
+
