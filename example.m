@@ -1,3 +1,5 @@
+addpath source
+
 %% Define external boundry
 boundry = [3 4 0 1 1 0 0 0 1 1]';
 
@@ -43,7 +45,7 @@ plot(start(1), start(2), 'go', 'MarkerFaceColor', 'g');
 plot(goal(1), goal(2), 'bo', 'MarkerFaceColor', 'b');
 title('RRT* without CBF safety'); drawnow;
 
-for i = 1:50
+for i = 1:100
     path = SafeCBFRRTStar(start, goal, occupancy_map, h, dhdx, dhdy, params);
     figure(without_cbf);
     plot(path(:,1), path(:, 2), 'r');
@@ -52,7 +54,7 @@ end
 % Run with CBF
 params = struct( ...
     "maxIter", 5000, ...
-    "v", 2, ...
+    "v", 1, ...
     "stepSize", 1, ...
     "kappa", 20, ...
     "c", 0.1, ...
@@ -71,7 +73,7 @@ plot(start(1), start(2), 'go', 'MarkerFaceColor', 'g');
 plot(goal(1), goal(2), 'bo', 'MarkerFaceColor', 'b');
 title('RRT* with CBF safety'); drawnow;
 
-for i = 1:50
+for i = 1:100
     path = SafeCBFRRTStar(start, goal, occupancy_map, h, dhdx, dhdy, params);
     figure(with_cbf);
     plot(path(:,1), path(:, 2), 'r');
