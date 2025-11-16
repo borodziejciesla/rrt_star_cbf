@@ -43,29 +43,35 @@ properties compared to standard RRT*, while maintaining computational tractabili
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
 In modern robotics applications, ensuring safe navigation in complex
-environments is one of the major challenges. 
+environments is one of the major challenges. This is particularly critical in
+scenarios involving human-robot interaction, autonomous vehicles, and
+unstructured terrains. Traditional motion planning algorithms often focus on
+finding feasible paths without formal guarantees of safety. To achieve such
+provable safety, Control Barrier Functions (CBFs) have emerged as a~powerful
+tool for enforcing safety constraints in control systems in last years. 
 
-Sampling-based motion planners such as RRT and RRT* are widely used for complex
+Sampling-based motion planners such as RRT or RRT* are widely used for complex
 robotic systems due to their scalability and ability to handle nonconvex
 constraints. However, they rely primarily on geometric collision checking,
-offering no formal guarantees of safety. Control Barrier Functions (CBFs)
-provide a~theoretical framework for ensuring safety in continuous-time control
-systems by enforcing forward invariance of safe sets.
+offering no formal guarantees of safety. For this reason, integrating CBFs into
+sampling-based planners seems a~promising direction to enhance safety while
+retaining the benefits of sampling-based methods.
 
 A~critical challenge in using CBFs for planning is the construction of
 a~suitable safety function $h(x)$, which must be continuously differentiable
 and satisfy certain regularity conditions. Analytical definitions of $h(x)$
-exist for simple geometries, but not for arbitrary obstacle configurations.
-
-In this work, we propose a~method to automatically generate a~smooth,
-differentiable safety function using the Poisson equation. The resulting
-\emph{Poisson Safety Function (PSF)} is used as the foundation of a~CBF
-integrated within RRT*. This combination provides both formal safety
-filtering and smooth exploration.
+exist for simple geometries, and lately there have been attempts to get CBF as
+solution of Poisson equation \cite{bahati2025dynamicsafetycomplexenvironments}.
+This approach will be used in this paper to generate a~Poisson Safety Function
+(PSF) that encodes obstacle boundaries and provides smooth safety gradients.
+Such definition of $h(x)$ is particularly advantageous for complex environments where
+analytical forms are not feasible. More over seems to be naturally compatible with
+the RRT or RRT* framework.
 
 \textbf{Contributions:}
+In this the \emph{Safe-CBF-RRT*} framework, the following contributions are made:
 \begin{itemize}
-    \item Integration of the derived field into a modified RRT* algorithm.
+    \item Integration of the PSF into a modified RRT* algorithm.
     \item Empirical results showing improved safety margins and convergence.
 \end{itemize}
 
@@ -92,6 +98,29 @@ boundary geometry.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Preliminaries}
+%========================================================================================
+\subsection{Control Barrier Functions}
+Control Barrier Functions (CBFs) provide a~formalism for ensuring safety in
+control systems by enforcing forward invariance of a~safe set. Given a~dynamical
+system
+\begin{equation}
+    \dot{x} = f(x) + g(x)u,
+\end{equation}
+where $x\in\mathbb{R}^n$ is the state, $u\in\mathbb{R}^m$ is the control input, and
+$f,g$ are locally Lipschitz continuous functions, a~set
+\begin{equation}
+    \mathcal{C} = \{x\in\mathbb{R}^n : h(x) \ge 0\}
+\end{equation}
+is defined as \emph{safe} if there exists a~continuously differentiable function
+$h:\mathbb{R}^n \to \mathbb{R}$ such that for all $x\in\mathcal{C}$,
+\begin{equation}
+    \sup_{u\in U} [L_f h(x) + L_g h(x) u] \ge -\kappa h(x),
+\end{equation}
+where $L_f h$ and $L_g h$ are the Lie derivatives of $h$ along $f$ and $g$,
+respectively, and $\kappa>0$ is a~tuning parameter. This condition ensures that the system's
+trajectories remain within the safe set $\mathcal{C}$ for all future times.
+
+%========================================================================================
 \subsection{Poisson Safety Function Generation}
 Let $\Omega \subset \mathbb{R}^2$ denote the workspace with boundary
 $\partial\Omega$ and obstacles $\mathcal{O}_i$. We define a~vector
@@ -173,13 +202,61 @@ and $N_{iter}=5000$.
 Two configurations were tested:
 \begin{enumerate}
     \item RRT* without CBF safety (baseline)
+    \begin{figure}[H]
     \begin{center}
-    \includegraphics[width=1.0\linewidth]{fig/rrt_without_cbf}
+        \includegraphics[width=1.0\linewidth]{fig/rrt_without_cbf}
+        \caption{Exemplary 100 different runs of standard RRT* algorithm.
+        It can be observed that some paths pass very close to obstacles.}
+        \label{fig:rrt_without_cbf}
     \end{center}
+    \end{figure}
+
+    \begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=1.0\linewidth]{fig/rrt_without_cbf_2}
+        \caption{Exemplary 100 different runs of standard RRT* algorithm.
+        It can be observed that some paths pass very close to obstacles.}
+        \label{fig:rrt_without_cbf_2}
+    \end{center}
+    \end{figure}
+
+    \begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=1.0\linewidth]{fig/rrt_without_cbf_3}
+        \caption{Exemplary 100 different runs of standard RRT* algorithm.
+        It can be observed that some paths pass very close to obstacles.}
+        \label{fig:rrt_without_cbf_3}
+    \end{center}
+    \end{figure}
+
     \item Safe-CBF-RRT* (proposed)
+    \begin{figure}[H]
     \begin{center}
-    \includegraphics[width=1.0\linewidth]{fig/rrt_with_cbf}
+        \includegraphics[width=1.0\linewidth]{fig/rrt_with_cbf}
+        \caption{Exemplary 100 different runs of modified CBF-RRT* algorithm.
+        It can be observed that in this case no path passes close to obstacles.}
+        \label{fig:rrt_with_cbf}
     \end{center}
+    \end{figure}
+
+    \begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=1.0\linewidth]{fig/rrt_with_cbf_2}
+        \caption{Exemplary 100 different runs of modified CBF-RRT* algorithm.
+        It can be observed that in this case no path passes close to obstacles.}
+        \label{fig:rrt_with_cbf_2}
+    \end{center}
+    \end{figure}
+
+    \begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=1.0\linewidth]{fig/rrt_with_cbf_3}
+        \caption{Exemplary 100 different runs of modified CBF-RRT* algorithm.
+        It can be observed that in this case no path passes close to obstacles.}
+        \label{fig:rrt_with_cbf_3}
+    \end{center}
+    \end{figure}
+
 \end{enumerate}
 The PSF produced smooth gradients and continuous safety margins. The proposed
 planner consistently generated paths that maintained higher safety levels while
