@@ -92,7 +92,7 @@ In this the \emph{Safe-CBF-RRT$^\star$} framework, the following contributions a
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Related Work}
-Sampling-based methods such as RRT and RRT$^\star$ \cite{karaman2011sampling} have
+Sampling-based methods such as RRT and RRT$^\star$ \cite{karaman2011samplingbasedalgorithmsoptimalmotion} have
 become standard in high-dimensional motion planning. Extensions incorporating
 optimality, dynamics, and risk awareness exist but often lack formal safety guarantees.
 
@@ -108,9 +108,37 @@ obstacles, which may be nondifferentiable in complex maps. Our approach
 bridges this gap by generating $h(x)$ through a~Poisson PDE that respects
 boundary geometry.
 
+%========================================================================================
+\subsection{Integration of CBFs in Sampling-based Planning}
+The integration of Control Barrier Functions with sampling-based planners often
+falls into two main categories: those focusing on \textit{control synthesis} and those
+focusing on \textit{path filtering}.
+
+\subsubsection{Dynamic and Robust CBF-RRT$^\star$ (Control Synthesis)}
+    More advanced methods
+    directly incorporate the system's dynamics into the planning process. For example,
+    the Robust CBF-RRT$^\star$ approach \cite{Yang_2019} uses CBF conditions, often solved
+    via Quadratic Programming (QP), at each time step along a sampled edge to
+    find a dynamically safe control input $u$. This approach guarantees safety
+    for kinodynamic systems and can be extended to Robust CBF (RCBF) to
+    handle bounded uncertainties \cite{Yang_2019}. Similarly, methods like
+    LQR-CBF-RRT$^\star$ aim for optimality by integrating the Linear Quadratic
+    Regulator (LQR) with CBF constraints, sometimes simplifying the process by
+    avoiding the continuous QP solving \cite{yang2023lqrcbfrrtsafeoptimalmotion}. While powerful,
+    these methods incur a high online computational cost due to the repeated
+    synthesis of safe control (e.g., solving QPs or LQR) during tree expansion.
+
+\subsubsection{Geometric CBF-RRT$^\star$ (Path Filtering)}
+    In contrast,
+    our method, \emph{Safe-CBF-RRT$^\star$}, uses a computationally lighter
+    approach. It employs a~simplified, discrete CBF condition applied to the
+    path segment geometry rather than synthesizing a~dynamic control trajectory.
+    This shifts the focus from finding an optimally safe control to generating an
+    inherently safe reference path with minimal online computational overhead.
+
 \textbf{Contrast with Tracking-Based Safety Methods (FaSTrack):} Another
-influential paradigm for provable safety is the \textbf{FaSTrack} framework
-\cite{fisac2019fasttrack}, which uses level-set methods and
+influential paradigm for provable safety is the \textit{FaSTrack} framework
+\cite{Chen_2021}, which uses level-set methods and
 Hamilton-Jacobi-Isaacs (HJI) equations to compute the aforementioned
 Safe-to-Track Set ($\mathcal{S}$). While FaSTrack offers strong, worst-case
 guarantees against bounded disturbances and execution error,
@@ -122,6 +150,7 @@ safety constraint derived from the smooth Poisson field directly into the
 sampling and rewiring steps. This allows the planner to efficiently
 \textit{generate inherently safe paths}, avoiding the need for expensive
 high-dimensional HJI solutions characteristic of FaSTrack-type approaches.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 \cite{bahati2025dynamicsafetycomplexenvironments}
