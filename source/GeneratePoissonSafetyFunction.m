@@ -38,7 +38,7 @@ function [h, dhdx, dhdy] = GeneratePoissonSafetyFunction(boundry, objects_list)
                 dy = y(k) - objects_list{object_index}.c(2);
                 d = sqrt(dx^2 + dy^2);
                 if d <= objects_list{object_index}.r + 1e-6
-                    bcval(:,k) = 2000 * [x(k) - objects_list{object_index}.c(1); y(k) - objects_list{object_index}.c(2)];
+                    bcval(:,k) = 200000 * [x(k) - objects_list{object_index}.c(1); y(k) - objects_list{object_index}.c(2)];
                 end
             end
 
@@ -114,6 +114,10 @@ function [h, dhdx, dhdy] = GeneratePoissonSafetyFunction(boundry, objects_list)
     h = griddata(x, y, h, Xq, Yq, 'linear');
     
     [dhdx, dhdy] = gradient(h, xq, yq);
+
+    h(isnan(h)) = 0;
+    dhdx(isnan(dhdx)) = 0;
+    dhdy(isnan(dhdy)) = 0;
 end
 
 

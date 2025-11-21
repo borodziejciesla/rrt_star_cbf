@@ -1,4 +1,4 @@
-function path = SafeCBFRRTStar(start, goal, occupancy, h_grid, dhx_grid, dhy_grid, params)
+function [path, pathLength, mean_h_path, rejection_ratio, iterations_number] = SafeCBFRRTStar(start, goal, occupancy, h_grid, dhx_grid, dhy_grid, params)
 % RRT_STAR_SAFETY_CBF  RRT* planning with CBF safety check and weighted cost.
 %
 % INPUTS:
@@ -17,15 +17,20 @@ function path = SafeCBFRRTStar(start, goal, occupancy, h_grid, dhx_grid, dhy_gri
 %
 % OUTPUT:
 %   path : Kx2 array of points from start to goal (empty if not found)
+%   pathLength : scalar, total Euclidean length of the returned path
+%   mean_h_path: scalar, average h along the path (length-weighted). NaN if no path.
 
 %% --- defaults & interpolants ---
 if ~exist('params','var'), params = struct(); end
 if ~isfield(params,'c'), params.c = 0.5; end
-if ~isfield(params,'maxIter'), params.maxIter = 2000; end
+if ~isfield(params,'maxIter'), params.maxIter = 10000; end
 if ~isfield(params,'stepSize'), params.stepSize = 2; end
 if ~isfield(params,'neighborRadius'), params.neighborRadius = 10; end
 if ~isfield(params,'samplesPerEdge'), params.samplesPerEdge = 20; end
 if ~isfield(params,'kappa'), params.kappa = 5; end
+% optional flags used elsewhere: do_cbf, v
+if ~isfield(params,'do_cbf'), params.do_cbf = true; end
+if ~isfield(params,'v'), params.v = 0; end
 
 [Ny, Nx] = size(occupancy);
 if ~isfield(params,'gridX'), params.gridX = 1:Nx; end
@@ -58,11 +63,7 @@ rng('shuffle');
 found = false;
 goalIdx = -1;
 
-% figure; hold on;
-% imagesc(gridX, gridY, ~occupancy); axis xy; colormap(gray);
-% plot(start(1), start(2), 'go','MarkerFaceColor','g');
-% plot(goal(1), goal(2), 'ro','MarkerFaceColor','r');
-% title('RRT* with CBF safety'); drawnow;
+acceptance_number = 0;
 
 for iter = 1:params.maxIter
     % sample
@@ -121,6 +122,7 @@ for iter = 1:params.maxIter
     end
 
     % add node
+    acceptance_number = acceptance_number + 1;
     newIdx = numel(nodes) + 1;
     nodes(newIdx).pos = p_new;
     nodes(newIdx).parent = best_parent;
@@ -144,10 +146,6 @@ for iter = 1:params.maxIter
         end
     end
 
-    % draw new edge
-    parentPos = nodes(nodes(newIdx).parent).pos;
-    % plot([parentPos(1), p_new(1)], [parentPos(2), p_new(2)], 'b-'); drawnow limitrate;
-
     % try connect to goal
     if norm(p_new - goal) <= params.stepSize
         if isCollisionFreeLine(p_new, goal, Focc, params.samplesPerEdge) && ...
@@ -163,10 +161,15 @@ for iter = 1:params.maxIter
     end
 end
 
+rejection_ratio = (iter - acceptance_number) / iter;
+iterations_number = iter;
+
 % reconstruct path
 if ~found
     fprintf('RRT*: goal not reached in %d iter\n', params.maxIter);
     path = [];
+    pathLength = 0;
+    mean_h_path = NaN;
     return;
 end
 
@@ -177,8 +180,40 @@ while pidx ~= 0
     pidx = nodes(pidx).parent;
 end
 
-% plot final path
-% plot(path(:,1), path(:,2), 'r-', 'LineWidth', 2);
+% compute path length and average h along path (length-weighted)
+pathLength = 0;
+h_weighted_sum = 0;
+nSeg = size(path,1) - 1;
+if nSeg <= 0
+    % single-point path (start==goal)
+    pathLength = 0;
+    % evaluate h at single point
+    hval = Fh(path(2), path(1)); %#ok<NASGU> % note griddedInterpolant expects (y,x)
+    mean_h_path = max(0, min(1, hval));
+else
+    for i = 1:nSeg
+        a = path(i,:);
+        b = path(i+1,:);
+        segLen = norm(b - a);
+        pathLength = pathLength + segLen;
+
+        if segLen > 0
+            % sample along segment
+            xs = linspace(a(1), b(1), params.samplesPerEdge);
+            ys = linspace(a(2), b(2), params.samplesPerEdge);
+            hvals = Fh(ys, xs);
+            segMeanH = mean(hvals(:));
+            h_weighted_sum = h_weighted_sum + segMeanH * segLen;
+        end
+    end
+    if pathLength > 0
+        mean_h_path = h_weighted_sum / pathLength;
+        mean_h_path = max(0, min(1, mean_h_path)); % clamp to [0,1]
+    else
+        mean_h_path = NaN;
+    end
+end
+
 end
 
 %% ---------------- helper functions ----------------
