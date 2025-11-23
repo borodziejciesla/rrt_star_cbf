@@ -1,11 +1,13 @@
 # CBF-RRT<sup>*</sup>
 
-## Algorithm:
+## Algorithm
+
 ### Find $h(x)$
+
 1. Make contours from grid.
 2. Set normal vectors to contours border.
 3. Solve Laplace equation -> produce $f(x)$ as force to Poisson equation.
-4. Solve Poisson equation 
+4. Solve Poisson equation
 5. Returns
 
 ![Safety Function](fig/output_h.svg)
@@ -13,6 +15,7 @@
 ### Safe RRT<sup>*</sup>
 
 ## Test Scenario
+
 Scene geometry:
 
 ![Scene Geometry](fig/scene_geometry.svg)
@@ -33,7 +36,9 @@ Solution of Poisson Equation:
 ![Vector Field](fig/poisson_safety_function.svg)
 
 Results:
+
 ## Without CBF
+
 Results for 50 runs
 
 ![Without CBF](fig/rrt_without_cbf.svg)
@@ -43,6 +48,7 @@ Single run - produced Tree:
 ![Without CBF](fig/rrt_without_cbf_tree.svg)
 
 ## Without CBF
+
 Results for 50 runs
 
 ![With CBF](fig/rrt_with_cbf.svg)
@@ -50,3 +56,17 @@ Results for 50 runs
 Single run - produced Tree:
 
 ![Without CBF](fig/rrt_with_cbf_tree.svg)
+
+## Results for tighter occupied space
+
+### Classic
+
+![h](paper/fig/scenario_i_no_cbf.png)
+
+### Safe CBF-RRT* - 2 m/s
+
+![h](paper/fig/scenario_i_with_cbf.png)
+
+### Safe CBF-RRT* - 0.5 m/s
+
+![h](paper/fig/scenario_i_with_cbf_05ms.png)
