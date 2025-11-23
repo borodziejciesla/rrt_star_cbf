@@ -241,14 +241,14 @@ function ok = isCBFSafeSegment(a, b, Fh, Fdhx, Fdhy, kappa, nSamples, do_cbf, v)
     hvals = Fh(ys, xs);
     dhx = Fdhx(ys, xs);
     dhy = Fdhy(ys, xs);
-    for k=1:numel(xs)
-        grad_h = [dhx(k), dhy(k)];
-        dotp = grad_h * dvec';
-        rhs = -kappa * hvals(k) * L;
-        if dotp < rhs - 1e-9
-            ok = false; return;
-        end
-    end
+    % for k=1:numel(xs)
+    %     grad_h = [dhx(k), dhy(k)];
+    %     dotp = grad_h * dvec';
+    %     rhs = -kappa * hvals(k) * L;
+    %     if dotp < rhs - 1e-9
+    %         ok = false; return;
+    %     end
+    % end
     h_prim = v*(dhx*cos(theta) + dhy*sin(theta));
     condition = (h_prim+kappa*hvals > 0);
     ok = all(condition);

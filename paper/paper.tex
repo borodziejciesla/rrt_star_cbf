@@ -8,6 +8,7 @@
 \usepackage{algorithmic}
 \usepackage{cite}
 \usepackage{float}
+\usepackage{hyperref}
 \usepackage{graphicx}
 \usepackage{siunitx}
 \usepackage{xcolor}
@@ -83,8 +84,8 @@ the RRT or RRT$^\star$ framework.
 \textbf{Contributions:}
 In this the \emph{Safe-CBF-RRT$^\star$} framework, the following contributions are made:
 \begin{itemize}
-    \item Integration of the PSF into a modified RRT$^\star$ algorithm.
-    \item A computationally efficient alternative to tracking-based safety
+    \item Integration of the PSF into a~modified RRT$^\star$ algorithm.
+    \item a~computationally efficient alternative to tracking-based safety
     methods
     like FaSTrack for generating inherently safe reference trajectories.
     \item Empirical results showing improved safety margins and convergence.
@@ -96,12 +97,12 @@ Sampling-based methods such as RRT and RRT$^\star$ \cite{karaman2011samplingbase
 become standard in high-dimensional motion planning. Extensions incorporating
 optimality, dynamics, and risk awareness exist but often lack formal safety guarantees.
 
-Potential field and PDE-based navigation \cite{connolly1990harmonic} have long
+Potential field and PDE-based navigation \cite{s22093295} have long
 been studied for path planning. Harmonic potential fields, governed by Laplace's
 equation, ensure smoothness and avoid local minima, yet they do not directly
 provide a~safety margin measurable in the CBF framework.
 
-Control Barrier Functions \cite{ames2017control,wang2022safe} ensure set
+Control Barrier Functions \cite{8796030,garg2023advancestheorycontrolbarrier} ensure set
 invariance in control systems but require a~known differentiable safety
 function. Existing methods often define $h(x)$ as analytic distances to
 obstacles, which may be nondifferentiable in complex maps. Our approach
@@ -118,19 +119,19 @@ focusing on \textit{path filtering}.
     More advanced methods
     directly incorporate the system's dynamics into the planning process. For example,
     the Robust CBF-RRT$^\star$ approach \cite{Yang_2019} uses CBF conditions, often solved
-    via Quadratic Programming (QP), at each time step along a sampled edge to
-    find a dynamically safe control input $u$. This approach guarantees safety
+    via Quadratic Programming (QP), at each time step along a~sampled edge to
+    find a~dynamically safe control input $u$. This approach guarantees safety
     for kinodynamic systems and can be extended to Robust CBF (RCBF) to
     handle bounded uncertainties \cite{Yang_2019}. Similarly, methods like
     LQR-CBF-RRT$^\star$ aim for optimality by integrating the Linear Quadratic
     Regulator (LQR) with CBF constraints, sometimes simplifying the process by
     avoiding the continuous QP solving \cite{yang2023lqrcbfrrtsafeoptimalmotion}. While powerful,
-    these methods incur a high online computational cost due to the repeated
+    these methods incur a~high online computational cost due to the repeated
     synthesis of safe control (e.g., solving QPs or LQR) during tree expansion.
 
 \subsubsection{Geometric CBF-RRT$^\star$ (Path Filtering)}
     In contrast,
-    our method, \emph{Safe-CBF-RRT$^\star$}, uses a computationally lighter
+    our method, \emph{Safe-CBF-RRT$^\star$}, uses a~computationally lighter
     approach. It employs a~simplified, discrete CBF condition applied to the
     path segment geometry rather than synthesizing a~dynamic control trajectory.
     This shifts the focus from finding an optimally safe control to generating an
@@ -175,7 +176,6 @@ This makes RRT$^\star$ suitable for high-dimensional motion planning problems wh
 exact optimal planning is computationally intractable
 \cite{karaman2010incrementalsamplingbasedalgorithmsoptimal},
 \cite{karaman2011samplingbasedalgorithmsoptimalmotion}.
-
 Algorithm is summarized in Algorithm~\ref{alg:rrtstar}.
 \begin{algorithm}[t]
 \caption{Classical RRT$^\star$ algorithm}
@@ -267,38 +267,105 @@ x,\partial h/\partial y]$ are computed using finite differences.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Safe CBF-RRT$^\star$ Algorithm}
+%========================================================================================
+We introduce several key modifications to the classical RRT$^\star$
+algorithm in order to incorporate safety constraints derived from
+the Poisson-based Control Barrier Function.
+\textbf{The most important changes are:}
+\begin{enumerate}
+    \item \textbf{Edges are validated using a CBF condition} computed
+    from the Poisson Safety Function (PSF) and its spatial gradients.
+
+    \item \textbf{A constant nominal traversal speed is assumed} when
+    moving along each candidate edge. This assumption is important: 
+    slower motion leads to larger feasible sets under the CBF condition,
+    meaning that \emph{even narrow passages may be safe at lower velocities},
+    while the same passages are considered unsafe at higher speeds.
+
+    \item \textbf{Edges violating the CBF constraint are rejected},
+    preventing unsafe tree expansion even if the geometric collision
+    check passes.
+
+    \item \textbf{A safety-weighted cost} is introduced to prefer paths
+    that stay in regions with higher PSF values (more safety margin).
+\end{enumerate}
+
+Together, these changes turn the sampling process itself into
+a~safety-aware procedure, rather than merely filtering an already planned path.
 
 %========================================================================================
 \subsection{Ensuring Safety with Poisson CBFs}
-Safe CBF-RRT$^\star$ integrates the PSF-based CBF constraint into the RRT$^\star$
-framework to ensure safety during tree expansion. The PSF $h(x)$ and its
-derivatives are used in following ways:
+The Poisson Safety Function $h(x)$ and its spatial derivatives provide
+a~smooth, differentiable representation of obstacle boundaries and safety
+gradients. In Safe CBF-RRT$^\star$, these quantities are used in three ways:
 \begin{itemize}
-    \item $h(x)$, $\frac{\partial h(x)}{\partial x}$, $\frac{\partial
-    h(x)}{\partial y}$ are used to fast check if sampled edge is CBF-safe -
-    assume simple constant velocity model along edge,
-    \item $h(x)$ is used to weight path costs - the higher the average $h(x)$
-    along the edge, the safer the edge is considered,
-    \item if simple traversing along the edge is safe then $h(x)$, $\frac{\partial h(x)}{\partial x}$, $\frac{\partial
-    h(x)}{\partial y}$ are used to check if control inputs can be found to
-    keep the system safe with smooth trajectory.
+    \item \textbf{Discrete CBF validation of each candidate edge.}
+    For a short edge between nodes $a$ and $b$, we assume motion with constant velocity $\dot{x}=v(b-a)/|b-a|$.
+    The CBF condition ---,
+    sampled at multiple points $p$ along the edge, determines whether traversal is safe.
+    This directly links feasibility to assumed speed.
+    \item \textbf{Safety-aware cost weighting.}
+    Each edge is assigned a~cost depending on both its length and average safety margin $\bar h$.
+    \item \textbf{Optional control-feasibility check.}
+    For edges that satisfy discrete CBF conditions, PSF gradients can be used to verify whether a continuous control input exists to maintain safety along the smooth trajectory.
 \end{itemize}
 
 %========================================================================================
-\subsection{Trajectory cost with safety weighting}
-Safe CBF-RRT$^\star$ extends RRT$^\star$ by filtering edges through CBF validation and
-weighting path costs by safety:
-\begin{align}
-J(a,b) = c L + (1-c)\frac{1}{\bar{h}},
-\end{align}
-where $L=\|b-a\|$, $\bar{h}$ is mean $h$ along the edge, and $c\in[0,1]$
-balances length and safety.
+\subsection{Trajectory Cost with Safety Weighting}
+To encourage the planner to use safer portions of the workspace, Safe
+CBF-RRT$^\star$ modifies the classical RRT$^\star$ cost function as:
+\begin{equation}
+J(a,b)=cL + (1-c)\frac{1}{\bar{h}},
+\end{equation}
+where $L=|b-a|$ is the geometric length, and $\bar{h}$ is the average PSF value along the edge.
+Parameter $c\in[0,1]$ determines the trade-off between path efficiency and safety.
 
 %========================================================================================
 \subsection{Summary of Safe-CBF-RRT$^\star$}
-The planner iteratively samples, extends, and rewires as in RRT$^\star$, rejecting
-edges that violate the CBF condition. A pseudocode outline is shown in
-Algorithm~\ref{alg:cbfrrt}.
+The overall algorithm follows the standard RRT$^\star$ structure
+but rejects edges that fail the CBF feasibility condition
+(dependent on assumed traversal speed).
+This results in a tree that grows preferentially through regions
+of high safety margin while still preserving the asymptotic optimality
+guarantees of RRT$^\star$ for the modified cost.
+
+A pseudocode outline of the method is shown in Algorithm~\ref{alg:cbfrrt}.
+
+
+
+
+
+
+
+% Safe CBF-RRT$^\star$ integrates the PSF-based CBF constraint into the RRT$^\star$
+% framework to ensure safety during tree expansion. The PSF $h(x)$ and its
+% derivatives are used in following ways:
+% \begin{itemize}
+%     \item $h(x)$, $\frac{\partial h(x)}{\partial x}$, $\frac{\partial
+%     h(x)}{\partial y}$ are used to fast check if sampled edge is CBF-safe -
+%     assume simple constant velocity model along edge,
+%     \item $h(x)$ is used to weight path costs - the higher the average $h(x)$
+%     along the edge, the safer the edge is considered,
+%     \item if simple traversing along the edge is safe then $h(x)$, $\frac{\partial h(x)}{\partial x}$, $\frac{\partial
+%     h(x)}{\partial y}$ are used to check if control inputs can be found to
+%     keep the system safe with smooth trajectory.
+% \end{itemize}
+
+% %========================================================================================
+% \subsection{Trajectory cost with safety weighting}
+% Safe CBF-RRT$^\star$ extends RRT$^\star$ by filtering edges through CBF validation and
+% weighting path costs by safety:
+% \begin{align}
+% J(a,b) = c L + (1-c)\frac{1}{\bar{h}},
+% \end{align}
+% where $L=\|b-a\|$, $\bar{h}$ is mean $h$ along the edge, and $c\in[0,1]$
+% balances length and safety.
+
+% %========================================================================================
+% \subsection{Summary of Safe-CBF-RRT$^\star$}
+% The planner iteratively samples, extends, and rewires as in RRT$^\star$, rejecting
+% edges that violate the CBF condition. a~pseudocode outline is shown in
+% Algorithm~\ref{alg:cbfrrt}.
 
 \begin{algorithm}[h]
 \caption{Safe-CBF-RRT$^\star$}
@@ -352,11 +419,11 @@ with same random seed to show how both algorithms behave in exactly same conditi
 Scenario I represents an environment with moderately spaced obstacles and
 relatively wide free-space corridors. The PSF field
 (Fig.~\ref{fig:scenario_i_h}) exhibits smooth gradients and well-defined
-safety basins around obstacles, making it a representative baseline configuration.
+safety basins around obstacles, making it a~representative baseline configuration.
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_i_h}
-    \caption{Control barrier function for scenario I.}
+    \caption{Control barrier function for Scenario~I.}
     \label{fig:scenario_i_h}
 \end{center}
 \end{figure}
@@ -370,7 +437,7 @@ increases from 118.57 to 147.86, while the mean safety metric improves by ~16\%.
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_i_no_cbf.png}
-    \caption{Exemplary results of 100 different runs of standard RRT$^\star$ algorithm.}
+    \caption{Exemplary results of 100 different runs of standard RRT$^\star$ algorithm for Scenario~I.}
     \label{fig:rrt_without_cbf_scenario_i}
 \end{center}
 \end{figure}
@@ -381,21 +448,33 @@ method effectively increases safety margins even in relatively easy environments
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_i_with_cbf.png}
-    \caption{Exemplary results of 100 different runs of CBF-RRT$^\star$ algorithm.}
+    \caption{Exemplary results of 100 different runs of CBF-RRT$^\star$
+    algorithm for Scenario~I - for $2 \frac{m}{s}$ target speed.}
     \label{fig:rrt_with_cbf_scenario_i}
 \end{center}
 \end{figure}
+\begin{figure}[H]
+\begin{center}
+    \includegraphics[width=1.0\linewidth]{fig/scenario_i_with_cbf_05ms.png}
+    \caption{Exemplary results of 100 different runs of CBF-RRT$^\star$
+    algorithm for Scenario~I - for $0.5\frac{m}{s}$ target speed.}
+    \label{fig:rrt_with_cbf_scenario_i}
+\end{center}
+\end{figure}
+
 
 \begin{table}[H]
 \caption{Performance comparison in Scenario I.}
 \begin{center}
 \begin{tabular}{|c|c|c|c|c|}
     \hline
-    Algorithm       & Length   & Average $h(x)$    & Iterations    &   Rejections ratio\\
+    Algorithm       & Length   & $\bar{h}(x)$    & Iterations    &   Rejections\\
     \hline
     RRT$^\star$     & 118.57    & 0.00057   & 333   & 13.6\%   \\
     \hline
-    CBF-RRT$^\star$ & 147.86    & 0.00066   & 563   & 48.7\% \\
+    CBF-RRT$^\star\,\left(2\frac{m}{s}\right)$ & 147.86    & 0.00066   & 563   & 48.7\% \\
+    \hline
+    CBF-RRT$^\star\,\left(0.5\frac{m}{s}\right)$ & 128.49    & 0.00065   & 372   & 27.5\% \\
     \hline
 \end{tabular}
 \end{center}
@@ -410,7 +489,7 @@ channels of admissible motion, making safety enforcement more restrictive.
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_ii_h}
-    \caption{Control barrier function for scenario II.}
+    \caption{Control barrier function for Scenario~II.}
     \label{fig:scenario_ii_h}
 \end{center}
 \end{figure}
@@ -421,11 +500,11 @@ maintaining only a~moderate safety average ($\bar h=0.00085$).
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_ii_no_cbf}
-    \caption{Exemplary 100 different runs of standard RRT$^\star$ algorithm.}
+    \caption{Exemplary 100 different runs of standard RRT$^\star$ algorithm for Scenario~II.}
     \label{fig:rrt_without_cbf_scenario_ii}
 \end{center}
 \end{figure}
-Safe-CBF-RRT$^\star$ must navigate through a more constrained safety landscape,
+Safe-CBF-RRT$^\star$ must navigate through a~more constrained safety landscape,
 leading to an even larger rejection ratio (59.9\%) and correspondingly more
 conservative motion. Although the resulting paths are longer (130.95), they
 traverse regions with noticeably higher PSF values, improving the average safety
@@ -433,23 +512,33 @@ metric by ~29\% relative to standard RRT$^\star$.
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_ii_with_cbf}
-    \caption{Exemplary 100 different runs of CBF-RRT$^\star$ algorithm.}
+    \caption{Exemplary 100 different runs of CBF-RRT$^\star$ algorithm for Scenario~II - for $2\frac{m}{s}$ target speed.}
     \label{fig:rrt_with_cbf_scenario_ii}
 \end{center}
 \end{figure}
 Scenario II highlights the ability of the method to maintain safe operation
 under geometric constraints that naturally encourage risk-taking behavior
 in classical sampling-based planners.
+\begin{figure}[H]
+\begin{center}
+    \includegraphics[width=1.0\linewidth]{fig/scenario_ii_with_cbf_05ms.png}
+    \caption{Exemplary 100 different runs of CBF-RRT$^\star$ algorithm for Scenario~II - for $0.5\frac{m}{s}$ target speed.}
+    \label{fig:rrt_with_cbf_scenario_ii}
+\end{center}
+\end{figure}
+
 \begin{table}[h]
 \caption{Performance comparison in Scenario II.}
 \begin{center}
 \begin{tabular}{|c|c|c|c|c|}
     \hline
-    Algorithm       & Length   & Average $h(x)$    & Iterations    &   Rejections ratio\\
+    Algorithm       & Length   & $\bar{h}(x)$    & Iterations    &   Rejections\\
     \hline
     RRT$^\star$     & 119.84    & 0.00085   & 345   & 29.0\%   \\
     \hline
-    CBF-RRT$^\star$ & 130.95    & 0.00110   & 537   & 59.9\% \\
+    CBF-RRT$^\star\,\left(2\frac{m}{s}\right)$ & 130.95    & 0.00110   & 537   & 59.9\% \\
+    \hline
+    CBF-RRT$^\star\,\left(0.5\frac{m}{s}\right)$ & 130.80    & 0.00109   & 407   & 48.5\% \\
     \hline
 \end{tabular}
 \end{center}
@@ -458,7 +547,7 @@ in classical sampling-based planners.
 
 %++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 \subsubsection{Scenario III}
-Scenario III consists primarily of an open environment with a few concentrated
+Scenario III consists primarily of an open environment with a~few concentrated
 high-risk areas. The PSF distribution (Fig.~\ref{fig:scenario_iii_h}) features
 broad low-gradient regions interspersed with sharp drops near obstacles.
 \begin{figure}[H]
@@ -475,7 +564,7 @@ value among all scenarios ($\bar h=0.00037$).
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_iii_no_cbf}
-    \caption{Exemplary 100 different runs of standard RRT$^\star$ algorithm.}
+    \caption{Exemplary 100 different runs of standard RRT$^\star$ algorithm for Scenario~III.}
     \label{fig:rrt_without_cbf_scenario_iii}
 \end{center}
 \end{figure}
@@ -490,23 +579,33 @@ the penalty for enforcing CBF constraints becomes minimal.
 \begin{figure}[H]
 \begin{center}
     \includegraphics[width=1.0\linewidth]{fig/scenario_iii_with_cbf}
-    \caption{Exemplary 100 different runs of CBF-RRT$^\star$ algorithm.}
+    \caption{Exemplary 100 different runs of CBF-RRT$^\star$ algorithm for Scenario~III - for $2\frac{m}{s}$ target speed.}
     \label{fig:rrt_with_cbf_scenario_iii}
 \end{center}
 \end{figure}
 Scenario III shows that the proposed planner adapts gracefully to environments
 where safe path options are naturally available, avoiding unnecessary
 conservatism while still improving safety.
+\begin{figure}[H]
+\begin{center}
+    \includegraphics[width=1.0\linewidth]{fig/scenario_iii_with_cbf_05ms.png}
+    \caption{Exemplary 100 different runs of CBF-RRT$^\star$ algorithm for Scenario~III - for $0.5\frac{m}{s}$ target speed.}
+    \label{fig:rrt_with_cbf_scenario_iii}
+\end{center}
+\end{figure}
+
 \begin{table}[H]
 \caption{Performance comparison in Scenario III.}
 \begin{center}
 \begin{tabular}{|c|c|c|c|c|}
     \hline
-    Algorithm       & Length   & Average $h(x)$    & Iterations    &   Rejections ratio\\
+    Algorithm       & Length   & $\bar{h}(x)$    & Iterations    &   Rejections\\
     \hline
     RRT$^\star$     & 122.71    & 0.00037   & 421   & 39.8\%   \\
     \hline
-    CBF-RRT$^\star$ & 126.32    & 0.00048   & 389   & 58.4\% \\
+    CBF-RRT$^\star\,\left(2\frac{m}{s}\right)$ & 126.32    & 0.00048   & 389   & 58.4\% \\
+    \hline
+    CBF-RRT$^\star\,\left(0.5\frac{m}{s}\right)$ & 126.51    & 0.00047   & 362   & 48.7\% \\
     \hline
 \end{tabular}
 \end{center}
@@ -514,17 +613,78 @@ conservatism while still improving safety.
 \end{table}
 
 \subsection{Discussion}
-The CBF constraint effectively rejected paths approaching obstacles too closely.
-The Poisson field provided well-conditioned gradients, improving planner
-stability. Despite the additional checks, runtime increased only marginally due
-to efficient gridded interpolation.
+The experimental evaluation across the three scenarios demonstrates
+that integrating a~Poisson-based CBF into the RRT$^\star$ framework
+substantially reshapes the planner's behavior, consistently favoring
+safer regions of the workspace. The results reveal a~clear trade-off
+between path optimality in terms of geometric length and improved safety,
+as measured by the Poisson Safety Function.
+
+In Scenario I, where wide corridors dominate the environment,
+Safe-CBF-RRT$^\star$ achieves a~noticeable increase in safety margin at
+the cost of moderate path elongation. The rejection ratio of nearly 50\%
+confirms that the PSF-based constraint actively filters out edges that
+steer too close to obstacles, even when those edges are geometrically
+efficient. Interestingly, despite higher rejection rates and longer exploration,
+the algorithm maintains stable convergence and achieves consistently safer
+trajectories across 100 runs.
+
+In Scenario II, which contains narrow passages and densely packed obstacles,
+the effect of CBF filtering becomes even more pronounced. Standard RRT$^\star$
+often forces its way through the narrowest admissible gaps, leading to short but
+unsafe trajectories characterized by very low mean PSF values. The
+Safe-CBF-RRT$^\star$ algorithm, in contrast, frequently avoids these bottlenecks
+entirely. As a~result, the planner may favor longer detours through alternative
+corridors offering smoother PSF gradients. This scenario highlights the
+fundamental benefit of embedding CBF-based reasoning directly in the sampling
+process: unsafe topological options are pruned early, and the planner adapts by
+allocating more iterations to exploring safer homotopy classes. Consequently,
+Safe-CBF-RRT$^\star$ exhibits both higher path length variance and significantly elevated 
+$\bar{h}$, which is aligned with the intended conservative behaviour.
+
+In Scenario III, where the environment is sparse and open, the difference
+between the two planners becomes less dramatic. With obstacles exerting weaker
+influence on the PSF gradients, most edges considered by RRT$^\star$ are already
+safely admissible. The rejection ratio drops, and the resulting paths of both
+algorithms approach similar lengths. Nevertheless, Safe-CBF-RRT$^\star$ still
+yields slightly higher average safety values, indicating that the PSF weighting
+in the cost function successfully biases the rewiring step toward more robust
+trajectories even when explicit filtering plays a~minor role. This scenario
+illustrates that the method does not degrade performance in trivially safe
+environments, maintaining comparable efficiency while providing a~marginal
+safety improvement at virtually no additional planning cost.
+
+Across all scenarios, the experiments with identical random seeds show that
+the algorithms diverge early in the exploration stage once the CBF constraint
+begins rejecting unsafe edges. This confirms that the proposed method influences
+the global structure of the growing tree rather than acting as a~lightweight
+post-filter. The mean number of iterations also consistently increases for
+Safe-CBF-RRT$^\star$, reflecting the planner's need to explore alternative safe
+regions when the straightforward geometric extension is disallowed.
+
+Finally, the comparison between the $c=1$ (pure length optimization) and $c=0$
+(pure risk minimization) regimes indicates that the PSF-based safety metric
+interacts naturally with the RRT$^\star$ rewiring mechanism. For $c=0$, the
+planner strongly prefers wide, smooth-value PSF basins, sometimes yielding
+significantly longer but uniformly safe paths. For intermediate values of 
+$c$, the trade-off can be tuned continuously depending on application needs
+(robot-human interaction, autonomous navigation in clutter, or low-risk
+operation for high-cost platforms).
+
+Overall, the results confirm that Poisson-based CBF integration provides
+a~principled mechanism for steering the sampling process toward inherently
+safe trajectories. It increases robustness in complex environments while
+preserving the asymptotic optimality structure of RRT$^\star$. The approach
+is especially advantageous in environments with narrow or ambiguous safety
+gradients, where purely geometric sampling is insufficient to avoid risky
+configurations.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion and Future Work}
-We presented \emph{Safe-CBF-RRT$^\star$}, a motion planning framework combining RRT$^\star$
+We presented \emph{Safe-CBF-RRT$^\star$}, a~motion planning framework combining RRT$^\star$
 with a~Control Barrier Function derived from a~Poisson Safety Field. The
 approach unifies PDE-based potential field generation with formal safety
-guarantees \textbf{in a manner computationally lighter than tracking-based methods (e.g., FaSTrack)}, while actively shaping the path for safety. Future work will extend this method to kinodynamic models, uncertain
+guarantees \textbf{in a~manner computationally lighter than tracking-based methods (e.g., FaSTrack)}, while actively shaping the path for safety. Future work will extend this method to kinodynamic models, uncertain
 environments, and real robotic experiments.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
