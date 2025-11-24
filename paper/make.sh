@@ -21,14 +21,30 @@ bibtex $output_name
 pdflatex $main_file
 pdflatex $main_file
 
+
 # ---
 ## Clean Up
+
+# Build short version
+short_file="paper_short.tex"
+short_name="paper_short"
+
+pdflatex $short_file
+bibtex $short_name
+pdflatex $short_file
+pdflatex $short_file
+
 
 echo "Cleaning up temporary files..."
 for ext in "${temp_files[@]}"; do
     if [ -f "$output_name$ext" ]; then
         rm "$output_name$ext"
         echo "Removed $output_name$ext"
+    fi
+
+    if [ -f "$short_name$ext" ]; then
+        rm "$short_name$ext"
+        echo "Removed $short_name$ext"
     fi
 done
 
