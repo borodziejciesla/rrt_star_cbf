@@ -34,6 +34,15 @@ bibtex $short_name
 pdflatex $short_file
 pdflatex $short_file
 
+# Build pcc version
+pcc_file="pcc.tex"
+pcc_name="pcc"
+
+pdflatex $pcc_file
+bibtex $pcc_name
+pdflatex $pcc_file
+pdflatex $pcc_file
+
 
 echo "Cleaning up temporary files..."
 for ext in "${temp_files[@]}"; do
@@ -45,6 +54,11 @@ for ext in "${temp_files[@]}"; do
     if [ -f "$short_name$ext" ]; then
         rm "$short_name$ext"
         echo "Removed $short_name$ext"
+    fi
+
+    if [ -f "$pcc_name$ext" ]; then
+        rm "$pcc_name$ext"
+        echo "Removed $pcc_name$ext"
     fi
 done
 
