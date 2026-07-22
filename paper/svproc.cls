@@ -52,7 +52,7 @@
 
 \ProcessOptions
 
-\LoadClass[twoside]{article}
+\LoadClass[a4paper]{article}
 \RequirePackage{multicol} % needed for the list of participants, index
 \RequirePackage{aliascnt}
 
