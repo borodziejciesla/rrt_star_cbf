@@ -1,72 +1,94 @@
-# CBF-RRT<sup>*</sup>
+# Safe CBF-RRT*
 
-## Algorithm
+This repository provides a MATLAB implementation of a safe motion-planning framework based on Rapidly-exploring Random Trees Star (RRT*) augmented with Control Barrier Function (CBF) constraints. The objective is to compute a feasible path that is both efficient and compliant with obstacle-avoidance requirements.
 
-### Find $h(x)$
+## Overview
 
-1. Make contours from grid.
-2. Set normal vectors to contours border.
-3. Solve Laplace equation -> produce $f(x)$ as force to Poisson equation.
-4. Solve Poisson equation
-5. Returns
+The implementation combines two complementary components:
 
-![Safety Function](fig/output_h.svg)
+- a safety field $h(x)$, constructed from the environment geometry and obstacle configuration;
+- a sampling-based planner that evaluates candidate edges against both collision constraints and CBF-based safety constraints.
 
-### Safe RRT<sup>*</sup>
+This formulation allows the planner to favor trajectories that remain in regions of higher safety margin while still preserving the asymptotic exploration properties of RRT*.
 
-## Test Scenario
+## Method
 
-Scene geometry:
+The pipeline consists of the following stages:
 
-![Scene Geometry](fig/scene_geometry.svg)
+1. Construct a safety function $h(x)$ over the workspace using a Poisson-based formulation.
+2. Compute the spatial gradients $\nabla h(x)$, which are used to evaluate local safety variation.
+3. Run the Safe CBF-RRT* planner, where each candidate edge is validated against:
+   - obstacle occupancy constraints;
+   - CBF admissibility conditions.
+4. Return a feasible path, together with associated path-length and safety metrics.
 
-Solution of Laplace equation:
+## Repository Structure
 
-![Laplace Equation](fig/laplace_equation.svg)
+- [example.m](example.m) — main script for reproducing the example experiment.
+- [source/GeneratePoissonSafetyFunction.m](source/GeneratePoissonSafetyFunction.m) — generation of the safety function and its derivatives.
+- [source/SafeCBFRRTStar.m](source/SafeCBFRRTStar.m) — implementation of the Safe CBF-RRT* planner.
+- [paper/](paper/) — supporting manuscript material, figures, and bibliography.
 
-output is force in Poisson equation for Poisson
-Safety Function $h(x)$.
+## Requirements
 
-![Vector Field](fig/vector_field_v.svg)
+- MATLAB (recommended) or Octave
+- No external dependencies are required.
 
-Solution of Poisson Equation:
+## Running the Example
 
-![Poisson Equation](fig/poisson_equation.svg)
+1. Open MATLAB or Octave in the repository root.
+2. Add the source directory to the MATLAB path:
 
-![Vector Field](fig/poisson_safety_function.svg)
+```matlab
+addpath('source');
+```
 
-Results:
+3. Execute the example script:
 
-## Without CBF
+```matlab
+example
+```
 
-Results for 50 runs
+The script generates several figures illustrating:
+- planning without CBF constraints;
+- planning with CBF constraints;
+- the resulting trajectories in the example environment.
+
+## Parameters
+
+The example in [example.m](example.m) allows modification of several key parameters, including:
+
+- start and goal positions;
+- the number of Monte Carlo trials `N`;
+- planner settings such as `maxIter`, `stepSize`, `kappa`, `v`, and `do_cbf`.
+
+## Representative Results
+
+The repository includes example visualizations generated from the described procedure:
+
+<!-- ![Safety Function](fig/output_h.svg)
+
+![Scene Geometry](fig/scene_geometry.svg) -->
 
 ![Without CBF](fig/rrt_without_cbf.svg)
 
-Single run - produced Tree:
-
-![Without CBF](fig/rrt_without_cbf_tree.svg)
-
-## Without CBF
-
-Results for 50 runs
-
 ![With CBF](fig/rrt_with_cbf.svg)
 
-Single run - produced Tree:
 
-![Without CBF](fig/rrt_with_cbf_tree.svg)
+### Average distance to obstacle
+Base: Average distance to closest objstacle = 3.743 +/- 0.831
+![With CBF](fig/base.png)
+Ours: Average distance to closest objstacle = 4.658 +/- 0.326
+![Without CBF](fig/ours.png)
 
-## Results for tighter occupied space
+![Dist](fig/distance.png)
 
-### Classic
+![Dist](fig/rrtstar_demo_without.gif)
+![Dist](fig/rrtstar_demo_with.gif)
 
-![h](paper/fig/scenario_i_no_cbf.png)
+## Notes
 
-### Safe CBF-RRT* - 2 m/s
+- Setting `do_cbf = true` enables the CBF-based safety constraint.
+- Setting `do_cbf = false` recovers the standard RRT* behavior without the safety filter.
+- For more demanding scenarios, increasing `maxIter` or tuning `kappa` and `v` may improve feasibility and path quality.
 
-![h](paper/fig/scenario_i_with_cbf.png)
-
-### Safe CBF-RRT* - 0.5 m/s
-
-![h](paper/fig/scenario_i_with_cbf_05ms.png)
