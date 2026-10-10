@@ -13,6 +13,8 @@ function [path, pathLength, mean_h_path, rejection_ratio, iterations_number] = S
 %       .neighborRadius         (default 10)
 %       .samplesPerEdge         (samples for collision & CBF checks, default 20)
 %       .kappa                  (CBF parameter, default 5)
+%       .maxIterAfterGoal       iterations used to improve a found solution
+%                               (default 1000)
 %       .gridX, .gridY          optional coordinate vectors (default 1:Nx,1:Ny)
 %
 % OUTPUT:
@@ -28,9 +30,11 @@ if ~isfield(params,'stepSize'), params.stepSize = 2; end
 if ~isfield(params,'neighborRadius'), params.neighborRadius = 10; end
 if ~isfield(params,'samplesPerEdge'), params.samplesPerEdge = 20; end
 if ~isfield(params,'kappa'), params.kappa = 5; end
+if ~isfield(params,'maxIterAfterGoal'), params.maxIterAfterGoal = 1000; end
 % optional flags used elsewhere: do_cbf, v
 if ~isfield(params,'do_cbf'), params.do_cbf = true; end
 if ~isfield(params,'v'), params.v = 0; end
+if ~isfield(params,'min_time'), params.min_time = false; end
 
 [Ny, Nx] = size(occupancy);
 if ~isfield(params,'gridX'), params.gridX = 1:Nx; end
@@ -62,6 +66,7 @@ rng('shuffle');
 
 found = false;
 goalIdx = -1;
+first_goal_iter = Inf;
 
 acceptance_number = 0;
 
@@ -85,17 +90,26 @@ for iter = 1:params.maxIter
     dir = dir/nd;
     p_new = p_near + min(params.stepSize, nd) * dir;
 
-    % collision and CBF check from p_near -> p_new
+    % Collision must be checked in both modes. In min_time mode only the
+    % CBF test is replaced by the speed-limit calculation.
     if ~isCollisionFreeLine(p_near, p_new, Focc, params.samplesPerEdge)
         continue;
     end
-    if ~isCBFSafeSegment(p_near, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
-        continue;
+    if ~params.min_time
+        if ~isCBFSafeSegment(p_near, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
+            continue;
+        end
+        min_t = 0;
+    else
+        min_t = findCBFMaxSpeed(p_near, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v);
+        if min_t > 100 || min_t <= 0 || isnan(min_t)
+            continue;
+        end
     end
 
     % candidate cost from nearest
     mean_h = meanSampledH(p_near, p_new, Fh, params.samplesPerEdge);
-    Jedge = edgeCostWeighted(p_near, p_new, mean_h, params.c, params.do_cbf);
+    Jedge = edgeCostWeighted(p_near, p_new, mean_h, params.c, min_t, params.min_time, params.do_cbf);
     cost_from_near = nodes(idx_near).cost + Jedge;
 
     % find neighbors within radius
@@ -109,11 +123,19 @@ for iter = 1:params.maxIter
         if ~isCollisionFreeLine(pj, p_new, Focc, params.samplesPerEdge)
             continue;
         end
-        if ~isCBFSafeSegment(pj, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
-            continue;
+        if ~params.min_time
+            if ~isCBFSafeSegment(pj, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
+                continue;
+            end
+            min_t = 0;
+        else
+            min_t = findCBFMaxSpeed(pj, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v);
+            if min_t > 100 || min_t <= 0 || isnan(min_t)
+                continue;
+            end
         end
         mean_h_j = meanSampledH(pj, p_new, Fh, params.samplesPerEdge);
-        Je = edgeCostWeighted(pj, p_new, mean_h_j, params.c, params.do_cbf);
+        Je = edgeCostWeighted(pj, p_new, mean_h_j, params.c, min_t, params.min_time, params.do_cbf);
         newCost = nodes(j).cost + Je;
         if newCost < best_cost
             best_cost = newCost;
@@ -132,32 +154,64 @@ for iter = 1:params.maxIter
     % rewire neighbors
     for j = neighbor_idx
         pj = nodes(j).pos;
-        if ~isCollisionFreeLine(p_new, pj, Focc, params.samplesPerEdge)
+        if ~isCollisionFreeLine(pj, p_new, Focc, params.samplesPerEdge)
             continue;
         end
-        if ~isCBFSafeSegment(p_new, pj, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
-            continue;
+        if ~params.min_time
+            if ~isCBFSafeSegment(pj, p_new, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
+                continue;
+            end
+            min_t = 0;
+        else
+            min_t = findCBFMaxSpeed(p_new, pj, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v);
+            if min_t > 100 || min_t <= 0 || isnan(min_t)
+                continue;
+            end
         end
         mean_h_pj = meanSampledH(p_new, pj, Fh, params.samplesPerEdge);
-        newCost = nodes(newIdx).cost + edgeCostWeighted(p_new, pj, mean_h_pj, params.c, params.do_cbf);
+        newCost = nodes(newIdx).cost + edgeCostWeighted(p_new, pj, mean_h_pj, params.c, min_t, params.min_time, params.do_cbf);
         if newCost < nodes(j).cost
             nodes(j).parent = newIdx;
             nodes(j).cost = newCost;
         end
     end
 
-    % try connect to goal
+    % Try connecting to the goal. Keep searching: stopping at the first
+    % feasible goal only returns the first solution, not the minimum-time one.
     if norm(p_new - goal) <= params.stepSize
-        if isCollisionFreeLine(p_new, goal, Focc, params.samplesPerEdge) && ...
-           isCBFSafeSegment(p_new, goal, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v)
-            mean_h_goal = meanSampledH(p_new, goal, Fh, params.samplesPerEdge);
-            nodes(end+1).pos = goal;
-            nodes(end).parent = newIdx;
-            nodes(end).cost = nodes(newIdx).cost + edgeCostWeighted(p_new, goal, mean_h_goal, params.c, params.do_cbf);
-            goalIdx = numel(nodes);
-            found = true;
-            break;
+        if params.min_time
+            min_t = findCBFMaxSpeed(p_new, goal, Fh, Fdhx, Fdhy, params.kappa, params.samplesPerEdge, params.do_cbf, params.v);
+        else
+            min_t = 0;
         end
+        goal_cbf_ok = params.min_time || isCBFSafeSegment( ...
+            p_new, goal, Fh, Fdhx, Fdhy, params.kappa, ...
+            params.samplesPerEdge, params.do_cbf, params.v);
+        if isCollisionFreeLine(p_new, goal, Focc, params.samplesPerEdge) && ...
+           goal_cbf_ok && ...
+           (min_t < 100 && min_t >= 0 && ~isnan(min_t))
+            mean_h_goal = meanSampledH(p_new, goal, Fh, params.samplesPerEdge);
+            goal_cost = nodes(newIdx).cost + edgeCostWeighted( ...
+                p_new, goal, mean_h_goal, params.c, min_t, ...
+                params.min_time, params.do_cbf);
+            if goalIdx < 0 || goal_cost < nodes(goalIdx).cost
+                nodes(end+1).pos = goal;
+                nodes(end).parent = newIdx;
+                nodes(end).cost = goal_cost;
+                goalIdx = numel(nodes);
+            end
+            found = true;
+            if isinf(first_goal_iter)
+                first_goal_iter = iter;
+            end
+        end
+    end
+
+    % RRT* needs some iterations after the first solution to improve it,
+    % but running the full budget for every example run is unnecessarily
+    % expensive.
+    if found && iter - first_goal_iter >= params.maxIterAfterGoal
+        break;
     end
 end
 
@@ -254,6 +308,49 @@ function ok = isCBFSafeSegment(a, b, Fh, Fdhx, Fdhy, kappa, nSamples, do_cbf, v)
     ok = all(condition);
 end
 
+function min_t = findCBFMaxSpeed(a, b, Fh, Fdhx, Fdhy, kappa, nSamples, do_cbf, v)
+    theta = atan2(b(2)-a(2), b(1)-a(1));
+    dvec = b - a;
+    L = norm(dvec);
+
+    if do_cbf == false
+        if v <= 0
+            min_t = 0;
+            return
+        end
+        min_t = L / v;
+        return
+    end
+    % discrete check of CBF: for each sample p along a->b
+    if L < 1e-9
+        min_t = 0;
+        return
+    end
+    xs = linspace(a(1), b(1), nSamples);
+    ys = linspace(a(2), b(2), nSamples);
+    hvals = Fh(ys, xs);
+    dhx = Fdhx(ys, xs);
+    dhy = Fdhy(ys, xs);
+    Lfh = (dhx*cos(theta) + dhy*sin(theta));
+    if v <= 0 || any(~isfinite(hvals(:))) || any(~isfinite(Lfh(:)))
+        min_t = 0;
+    else
+        % For Lfh < 0, the CBF gives v <= kappa*h/(-Lfh).
+        % The segment speed must satisfy every sample, hence the minimum
+        % positive bound is the active one, not the maximum bound.
+        speed_limits = kappa*hvals(Lfh < 0)./(-Lfh(Lfh < 0));
+        if any(speed_limits <= 0) || any(v*Lfh + kappa*hvals < 0)
+            min_t = 0;
+        else
+            max_speed = v;
+            if ~isempty(speed_limits)
+                max_speed = min(max_speed, min(speed_limits));
+            end
+            min_t = L / max_speed;
+        end
+    end
+end
+
 function meanh = meanSampledH(a, b, Fh, nSamples)
     xs = linspace(a(1), b(1), nSamples);
     ys = linspace(a(2), b(2), nSamples);
@@ -263,11 +360,15 @@ function meanh = meanSampledH(a, b, Fh, nSamples)
     meanh = max(0, min(1, meanh));
 end
 
-function J = edgeCostWeighted(a, b, mean_h, c, do_cbf)
-    L = norm(b - a);
-    if do_cbf
-        J = c * L + (1 - c) * (1/mean_h); %(1 - mean_h);
+function J = edgeCostWeighted(a, b, mean_h, c, t, min_t, do_cbf)
+    if ~min_t
+        L = norm(b - a);
+        if do_cbf
+            J = c * L + (1 - c) * (1/mean_h); %(1 - mean_h);
+        else
+            J = L;
+        end
     else
-        J = L;
+        J = t;
     end
 end

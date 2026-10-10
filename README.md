@@ -91,4 +91,11 @@ Ours: Average distance to closest objstacle = 4.658 +/- 0.326
 - Setting `do_cbf = true` enables the CBF-based safety constraint.
 - Setting `do_cbf = false` recovers the standard RRT* behavior without the safety filter.
 - For more demanding scenarios, increasing `maxIter` or tuning `kappa` and `v` may improve feasibility and path quality.
-
+- The planner uses a unicycle state `[x, y, theta]` by default and propagates
+  `x_dot = v*cos(theta)`, `y_dot = v*sin(theta)`, `theta_dot = omega`.
+  The objective is traversal time. For every local trajectory, the planner
+  computes the largest constant `v` in `[vMin, vMax]` satisfying
+  `v*(dhdx*cos(theta) + dhdy*sin(theta)) + kappa*h >= 0`
+  at all samples. Configure `vMax`, `vMin`, `maxOmega`, `integrationStep`,
+  and the goal tolerances in `params`.
+  Set `params.model = "point"` to use the legacy holonomic steering.
