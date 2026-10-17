@@ -1,4 +1,4 @@
-function [path, pathLength, mean_h_path, rejection_ratio, iterations_number] = SafeCBFRRTStar(start, goal, occupancy, h_grid, dhx_grid, dhy_grid, params)
+function [path, pathLength, mean_h_path, rejection_ratio, iterations_number, segment_speeds] = SafeCBFRRTStar(start, goal, occupancy, h_grid, dhx_grid, dhy_grid, params)
 % RRT_STAR_SAFETY_CBF  RRT* planning with CBF safety check and weighted cost.
 %
 % INPUTS:
@@ -21,6 +21,7 @@ function [path, pathLength, mean_h_path, rejection_ratio, iterations_number] = S
 %   path : Kx2 array of points from start to goal (empty if not found)
 %   pathLength : scalar, total Euclidean length of the returned path
 %   mean_h_path: scalar, average h along the path (length-weighted). NaN if no path.
+%   segment_speeds : (K-1)x1 speed for each path segment; NaN if unavailable
 
 %% --- defaults & interpolants ---
 if ~exist('params','var'), params = struct(); end
@@ -224,6 +225,7 @@ if ~found
     path = [];
     pathLength = 0;
     mean_h_path = NaN;
+    segment_speeds = zeros(0, 1);
     return;
 end
 
@@ -238,6 +240,7 @@ end
 pathLength = 0;
 h_weighted_sum = 0;
 nSeg = size(path,1) - 1;
+segment_speeds = NaN(nSeg, 1);
 if nSeg <= 0
     % single-point path (start==goal)
     pathLength = 0;
@@ -252,6 +255,17 @@ else
         pathLength = pathLength + segLen;
 
         if segLen > 0
+            if params.min_time
+                segment_time = findCBFMaxSpeed( ...
+                    a, b, Fh, Fdhx, Fdhy, params.kappa, ...
+                    params.samplesPerEdge, params.do_cbf, params.v);
+                if segment_time > 0 && isfinite(segment_time)
+                    segment_speeds(i) = segLen / segment_time;
+                end
+            elseif params.v > 0
+                segment_speeds(i) = params.v;
+            end
+
             % sample along segment
             xs = linspace(a(1), b(1), params.samplesPerEdge);
             ys = linspace(a(2), b(2), params.samplesPerEdge);
@@ -339,7 +353,7 @@ function min_t = findCBFMaxSpeed(a, b, Fh, Fdhx, Fdhy, kappa, nSamples, do_cbf, 
         % The segment speed must satisfy every sample, hence the minimum
         % positive bound is the active one, not the maximum bound.
         speed_limits = kappa*hvals(Lfh < 0)./(-Lfh(Lfh < 0));
-        if any(speed_limits <= 0) || any(v*Lfh + kappa*hvals < 0)
+        if any(speed_limits <= 0)
             min_t = 0;
         else
             max_speed = v;

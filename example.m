@@ -31,14 +31,14 @@ grid_y = 1:Ny;
 
 start = [10, 10];
 goal = [90, 90];
-N = 10;
+N = 25;
 
 %% Run without CBF
 params = struct( ...
     "maxIter", 10000, ...
-    "v", 1, ...
+    "v", 2.0, ...
     "stepSize", 1, ...
-    "kappa", 50, ...
+    "kappa", 50.0, ...
     "c", 1.0, ...
     "do_cbf", false, ...
     "min_time", false ...
@@ -96,7 +96,7 @@ average_iterations_number = mean(iterations);
 average_obstacle_distance_without_val = mean(average_obstacle_distance_without, 'omitnan');
 average_obstacle_distance_without_std = std(average_obstacle_distance_without, 'omitnan');
 
-figure();
+distance_profile_without_cbf = figure();
 plot(progress_percent, mean(distance_profiles_without, 2, 'omitnan'), 'LineWidth', 1.5);
 hold on;
 grid on;
@@ -108,9 +108,9 @@ drawnow;
 %% Run with CBF
 params = struct( ...
     "maxIter", 10000, ...
-    "v", 1.0, ...
+    "v", 2.0, ...
     "stepSize", 1, ...
-    "kappa", 50, ...
+    "kappa", 50.0, ...
     "c", 0.0, ...
     "do_cbf", true, ...
     "min_time", true ...
@@ -118,17 +118,22 @@ params = struct( ...
 
 with_cbf = figure();
 hold on; grid on;
-imagesc(grid_x, grid_y, ~occupancy_map);
+occupancy_rgb = repmat(uint8(255 * ~occupancy_map), 1, 1, 3);
+imagesc(grid_x, grid_y, occupancy_rgb);
 axis xy;
 axis equal;
 xlabel('x');
 ylabel('y');
-colormap(gray);
+speed_colormap = parula(256);
+colormap(speed_colormap);
+caxis([0, params.v]);
+speed_colorbar = colorbar;
+ylabel(speed_colorbar, 'Speed [grid units/s]');
 xlim([1, 100]);
 ylim([1, 100]);
 plot(start(1), start(2), 'go', 'MarkerFaceColor', 'g');
 plot(goal(1), goal(2), 'bo', 'MarkerFaceColor', 'b');
-title('RRT* with CBF safety'); drawnow;
+title('RRT* with CBF safety (color = speed)'); drawnow;
 
 lengths_safe = NaN(1, N);
 average_h_safe = zeros(1, N);
@@ -137,17 +142,19 @@ iterations_safe = zeros(1, N);
 average_obstacle_distance_safe = NaN(1, N);
 minimum_obstacle_distance_safe = NaN(1, N);
 distance_profiles_safe = NaN(100, N);
+segment_speeds_safe = cell(1, N);
 
 for i = 1:N
     rng(i);
-    [path, path_length, mean_h_path, rejection_ratio, iterations_number] ...
+    [path, path_length, mean_h_path, rejection_ratio, iterations_number, segment_speeds] ...
         = SafeCBFRRTStar(start, goal, occupancy_map, h, dhdx, dhdy, params);
     if isempty(path)
         continue;
     end
     figure(with_cbf);
-    plot(path(:,1), path(:, 2), 'r');
+    plotPathBySegmentSpeed(gca, path, segment_speeds, params.v, speed_colormap);
     lengths_safe(i) = path_length;
+    segment_speeds_safe{i} = segment_speeds;
     average_h_safe(i) = mean_h_path;
     rejection_ratios_safe(i) = rejection_ratio;
     iterations_safe(i) = iterations_number;
@@ -170,9 +177,9 @@ average_obstacle_distance_safe_std = std(average_obstacle_distance_safe, 'omitna
 %% Run with CBF without time optimization
 params = struct( ...
     "maxIter", 10000, ...
-    "v", 1.0, ...
+    "v", 2.0, ...
     "stepSize", 1, ...
-    "kappa", 50, ...
+    "kappa", 50.0, ...
     "c", 0.0, ...
     "do_cbf", true, ...
     "min_time", false ...
@@ -230,7 +237,7 @@ average_obstacle_distance_safe_without_time_val = mean(average_obstacle_distance
 average_obstacle_distance_safe_without_time_std = std(average_obstacle_distance_safe_without_time, 'omitnan');
 
 %% Compare results
-figure();
+distance_profile_comparison = figure();
 hold on;
 grid on;
 plot(progress_percent, mean(distance_profiles_safe, 2, 'omitnan'), 'LineWidth', 1.5);
@@ -245,7 +252,7 @@ drawnow;
 
 all_path_lengths = [lengths(:); lengths_safe(:); lengths_safe_without_time(:)];
 all_path_lengths = all_path_lengths(isfinite(all_path_lengths));
-figure();
+path_length_distribution = figure();
 hold on;
 grid on;
 if isempty(all_path_lengths)
@@ -276,7 +283,7 @@ minimum_distance_stds = [ ...
     std(minimum_obstacle_distance_safe_without_time, 'omitnan'), ...
     std(minimum_obstacle_distance_without, 'omitnan') ...
 ];
-figure();
+minimum_obstacle_distance_comparison = figure();
 bar(minimum_distance_means);
 hold on;
 grid on;
@@ -306,6 +313,23 @@ fprintf('Minimum distance to closest obstacle (CBF without time optimization) = 
 fprintf('Minimum distance to closest obstacle (without CBF) = %.3f +/- %.3f\n', ...
     minimum_distance_means(3), minimum_distance_stds(3));
 
+fig_dir = fullfile(fileparts(mfilename('fullpath')), 'fig');
+if exist(fig_dir, 'dir') ~= 7
+    mkdir(fig_dir);
+end
+
+saveas(without_cbf, fullfile(fig_dir, 'rrt_without_cbf_generated.svg'));
+saveas(with_cbf, fullfile(fig_dir, 'rrt_with_cbf_time_optimization.svg'));
+saveas(with_cbf_without_time, ...
+    fullfile(fig_dir, 'rrt_with_cbf_without_time_optimization.svg'));
+saveas(distance_profile_without_cbf, ...
+    fullfile(fig_dir, 'average_obstacle_distance_without_cbf.svg'));
+saveas(distance_profile_comparison, ...
+    fullfile(fig_dir, 'average_obstacle_distance_comparison.svg'));
+saveas(path_length_distribution, fullfile(fig_dir, 'path_length_distribution.svg'));
+saveas(minimum_obstacle_distance_comparison, ...
+    fullfile(fig_dir, 'minimum_obstacle_distance_comparison.svg'));
+
 function [distance_profile, progress_percent] = computeObstacleDistanceProfile(path, distance_map, grid_x, grid_y)
     progress_percent = linspace(0, 100, 100);
     if isempty(path) || size(path, 1) < 2
@@ -329,4 +353,19 @@ function [distance_profile, progress_percent] = computeObstacleDistanceProfile(p
     distance_profile = Fdist(y_profile, x_profile);
     distance_profile = max(0, distance_profile);
     distance_profile = distance_profile(:);
+end
+
+function plotPathBySegmentSpeed(ax, path, segment_speeds, speed_limit, speed_colormap)
+    for segment_idx = 1:numel(segment_speeds)
+        speed = segment_speeds(segment_idx);
+        if ~isfinite(speed)
+            continue;
+        end
+
+        color_idx = 1 + round((size(speed_colormap, 1) - 1) * speed / speed_limit);
+        color_idx = min(size(speed_colormap, 1), max(1, color_idx));
+        line(ax, path(segment_idx:segment_idx+1, 1), ...
+            path(segment_idx:segment_idx+1, 2), ...
+            'Color', speed_colormap(color_idx, :), 'LineWidth', 2);
+    end
 end
